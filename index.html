@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kedai Stock Alerts</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2d3646;
+    --txt:#e6edf3; --muted:#8b98a9;
+    --ok:#2ea043; --warn:#d29922; --urgent:#f85149; --accent:#58a6ff;
+    --accent2:#bc8cff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font:13px/1.45 "Segoe UI",system-ui,Arial,sans-serif;padding:16px}
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  header h1{font-size:22px;letter-spacing:.5px;text-transform:uppercase;color:var(--accent)}
+  header .sub{color:var(--muted);font-size:12px}
+  .badge{background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;color:var(--muted)}
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+  #search{flex:1;min-width:240px;max-width:420px;background:var(--panel);border:1px solid var(--border);color:var(--txt);padding:8px 12px;border-radius:6px;font-size:13px;outline:none}
+  #search:focus{border-color:var(--accent)}
+  .summary{display:flex;gap:10px;flex-wrap:wrap}
+  .kpi{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px 14px;min-width:120px}
+  .kpi .num{font-size:20px;font-weight:700}
+  .kpi .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  section{background:var(--panel);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;overflow:hidden}
+  section h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;padding:10px 14px;background:var(--panel2);border-bottom:1px solid var(--border);color:var(--accent2)}
+  section h2 small{color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);background:#121820}
+  td{padding:7px 10px;border-bottom:1px solid #222b38;font-size:12.5px;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#1a2130}
+  .status{display:inline-block;padding:1px 8px;border-radius:10px;font-size:10.5px;font-weight:700;text-transform:uppercase}
+  .st-ok{background:#12321d;color:#3fd668;border:1px solid #1d5a30}
+  .st-low{background:#332a12;color:#e2b93b;border:1px solid #5c4c1a}
+  .st-urgent{background:#3a1518;color:#ff6b64;border:1px solid #6b2320}
+  .st-expiry{background:#3a1e12;color:#ff9c5b;border:1px solid #6b3a1d}
+  .row-low{background:rgba(210,153,34,.08)}
+  .row-urgent{background:rgba(248,81,73,.10)}
+  .num-strong{font-weight:700}
+  .neg{color:var(--urgent)} .pos{color:var(--ok)} .mid{color:var(--warn)}
+  .empty{padding:20px;text-align:center;color:var(--muted)}
+  footer{color:var(--muted);font-size:11px;margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Kedai Stock Alerts</h1>
+  <span class="sub">Inventory, demand &amp; purchase planning — sample data, nothing saved</span>
+  <span class="badge">Target cover: 60 days</span>
+</header>
+
+<div class="toolbar">
+  <input id="search" type="search" placeholder="Search SKU or product name… (filters all sections)" autocomplete="off">
+  <div class="summary" id="kpis"></div>
+</div>
+
+<section id="sec-inv">
+  <h2>1 · Inventory Dashboard <small>live stock health by SKU</small></h2>
+  <table id="tbl-inv">
+    <thead><tr>
+      <th>SKU</th><th>Product</th><th>Current Stock</th><th>Expiry Date</th>
+      <th>Lead Time (days)</th><th>Avg Daily Sales</th><th>Days of Cover</th><th>Status</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="empty" id="empty-inv" hidden>No matching SKUs.</div>
+</section>
+
+<section id="sec-demand">
+  <h2>2 · Demand Planning <small>forecast vs actual sales (this month)</small></h2>
+  <table id="tbl-demand">
+    <thead><tr>
+      <th>SKU</th><th>Product</th><th>Monthly Forecast</th><th>Actual Sales</th><th>Variance</th><th>Forecast Accuracy</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="empty" id="empty-demand" hidden>No matching SKUs.</div>
+</section>
+
+<section id="sec-purchase">
+  <h2>3 · Purchase Planning <small>suggested order to reach 60-day cover</small></h2>
+  <table id="tbl-purchase">
+    <thead><tr>
+      <th>SKU</th><th>Product</th><th>Current Stock</th><th>Target (60-day units)</th>
+      <th>Lead Time (days)</th><th>Suggested Purchase Qty</th><th>Notes</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="empty" id="empty-purchase" hidden>No matching SKUs.</div>
+</section>
+
+<footer>All figures are illustrative sample data for a Malaysian retail kedarai. No data is stored between visits.</footer>
+
+<script>
+// ---- sample data (units in pieces; sales units/month) ----
+const TARGET_COVER = 60; // days
+const DAYS_MONTH = 30;
+const skus = [
+  {sku:"MY-FG-1001", name:"Milo Tin 1kg (Kedai Pack)",      stock:45,  expiry:"2027-03-15", lead:14, daily:3.0,  forecast:90,  actual:96},
+  {sku:"MY-BA-2004", name:"Beras Cap Rambutan 10kg",        stock:8,   expiry:"2026-08-01", lead:21, daily:2.5,  forecast:75,  actual:52},
+  {sku:"MY-MI-3010", name:"Maggie Curry Instant Noodle",    stock:120, expiry:"2027-06-20", lead:7,  daily:4.0,  forecast:120, actual:118},
+  {sku:"MY-CO-4123", name:"Cooking Oil Palm 5kg",           stock:18,  expiry:"2026-12-10", lead:10, daily:2.2,  forecast:66,  actual:71},
+  {sku:"MY-SB-5032", name:"Sardin Tin Ayam Brand 425g",     stock:60,  expiry:"2026-05-30", lead:12, daily:1.5,  forecast:45,  actual:33},
+];
+const today = new Date();
+const NEAR_EXPIRY_DAYS = 90;
+
+function daysCover(s){ return s.daily > 0 ? s.stock / s.daily : Infinity; }
+function statusOf(s){
+  const cov = daysCover(s);
+  const expDays = (new Date(s.expiry) - today) / 86400000;
+  if (cov < s.lead || s.stock <= 0) return {cls:"st-urgent", label:"URGENT", row:"row-urgent"};
+  if (expDays < NEAR_EXPIRY_DAYS)  return {cls:"st-expiry", label:"NEAR EXPIRY", row:"row-low"};
+  if (cov < TARGET_COVER)          return {cls:"st-low",    label:"LOW",       row:"row-low"};
+  return {cls:"st-ok", label:"SAFE", row:""};
+}
+function accuracy(f,a){ return f>0 ? (1 - Math.abs(f-a)/f)*100 : 0; }
+function fmtAcc(p){ return p.toFixed(1)+"%"; }
+function accClass(p){ return p>=90?"pos":(p>=75?"mid":"neg"); }
+
+function suggestedQty(s){
+  const targetUnits = Math.ceil(TARGET_COVER * s.daily);
+  const leadDemand  = Math.ceil(s.lead * s.daily);
+  const qty = Math.max(0, targetUnits - s.stock + leadDemand); // cover gap + demand during lead time
+  let note;
+  if (qty === 0) note = "No order needed — cover already ≥ 60 days.";
+  else if (daysCover(s) < s.lead) note = `Order urgently: stock runs out before ${s.lead}-day lead time ends.`;
+  else if (daysCover(s) < TARGET_COVER) note = `Top up to reach 60-day cover; order early (lead time ${s.lead}d).`;
+  else note = "Buffer order for lead-time demand.";
+  return {qty, targetUnits, note};
+}
+
+function matches(s, q){
+  return !q || s.sku.toLowerCase().includes(q) || s.name.toLowerCase().includes(q);
+}
+
+function render(){
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const rows = skus.filter(s => matches(s,q));
+
+  // KPIs
+  const urgent = skus.filter(s=>statusOf(s).label==="URGENT").length;
+  const low    = skus.filter(s=>["LOW","NEAR EXPIRY"].includes(statusOf(s).label)).length;
+  const avgAcc = skus.reduce((t,s)=>t+accuracy(s.forecast,s.actual),0)/skus.length;
+  document.getElementById("kpis").innerHTML =
+    `<div class="kpi"><div class="num">${skus.length}</div><div class="lbl">SKUs tracked</div></div>
+     <div class="kpi"><div class="num neg">${urgent}</div><div class="lbl">Urgent</div></div>
+     <div class="kpi"><div class="num mid">${low}</div><div class="lbl">Low / near expiry</div></div>
+     <div class="kpi"><div class="num ${accClass(avgAcc)}">${avgAcc.toFixed(1)}%</div><div class="lbl">Avg forecast accuracy</div></div>`;
+
+  // 1. Inventory
+  const b1 = document.querySelector("#tbl-inv tbody"); b1.innerHTML = "";
+  rows.forEach(s=>{
+    const st = statusOf(s), cov = daysCover(s);
+    const covCls = cov >= TARGET_COVER ? "pos" : (cov < s.lead ? "neg" : "mid");
+    b1.insertAdjacentHTML("beforeend",
+      `<tr class="${st.row}"><td class="num-strong">${s.sku}</td><td>${s.name}</td>
+       <td class="num-strong">${s.stock}</td><td>${s.expiry}</td><td>${s.lead}d</td>
+       <td>${s.daily.toFixed(1)}/day</td>
+       <td class="num-strong ${covCls}">${cov===Infinity?"∞":cov.toFixed(0)}d</td>
+       <td><span class="status ${st.cls}">${st.label}</span></td></tr>`);
+  });
+
+  // 2. Demand
+  const b2 = document.querySelector("#tbl-demand tbody"); b2.innerHTML = "";
+  rows.forEach(s=>{
+    const acc = accuracy(s.forecast, s.actual);
+    const v = s.actual - s.forecast;
+    b2.insertAdjacentHTML("beforeend",
+      `<tr><td class="num-strong">${s.sku}</td><td>${s.name}</td>
+       <td>${s.forecast} units</td><td>${s.actual} units</td>
+       <td class="${v>=0?"pos":"neg"}">${v>=0?"+":""}${v} units</td>
+       <td class="num-strong ${accClass(acc)}">${fmtAcc(acc)}</td></tr>`);
+  });
+
+  // 3. Purchase
+  const b3 = document.querySelector("#tbl-purchase tbody"); b3.innerHTML = "";
+  rows.forEach(s=>{
+    const p = suggestedQty(s);
+    b3.insertAdjacentHTML("beforeend",
+      `<tr class="${p.qty>0&&daysCover(s)<s.lead?"row-urgent":(p.qty>0?"row-low":"")}">
+       <td class="num-strong">${s.sku}</td><td>${s.name}</td><td>${s.stock}</td>
+       <td>${p.targetUnits} units</td><td>${s.lead}d</td>
+       <td class="num-strong ${p.qty>0?"mid":"pos"}" style="font-size:14px">${p.qty>0?"BUY "+p.qty:"—"}</td>
+       <td style="white-space:normal;color:var(--muted)">${p.note}</td></tr>`);
+  });
+
+  ["inv","demand","purchase"].forEach(k=>{
+    document.getElementById("empty-"+k).hidden = rows.length > 0;
+    document.getElementById("tbl-"+k).style.display = rows.length ? "" : "none";
+  });
+}
+document.getElementById("search").addEventListener("input", render);
+render();
+</script>
+</body>
+</html>
